@@ -43,3 +43,10 @@ canvas {
   font-weight: bold;
   flex-wrap: wrap;
 }
+
+
+h1 small {
+  font-size: 0.56em;
+  opacity: 0.9;
+  font-weight: 700;
+}
