@@ -2,6 +2,7 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const scoreEl = document.getElementById("score");
 const livesEl = document.getElementById("lives");
+const powerEl = document.getElementById("power");
 
 const GRAVITY = 0.55;
 const GROUND_FRICTION = 0.82;
@@ -9,7 +10,7 @@ const AIR_FRICTION = 0.94;
 const MAX_FALL = 14;
 
 const world = {
-  width: 3200,
+  width: 3600,
   height: canvas.height,
   cameraX: 0,
   score: 0,
@@ -28,50 +29,56 @@ const player = {
   h: 58,
   vx: 0,
   vy: 0,
-  speed: 1.05,
+  speed: 1.1,
   jumpPower: -14,
   onGround: false,
   facing: 1,
   invincibleTimer: 0,
+  superTimer: 0,
 };
 
 const platforms = [
-  { x: 0, y: 510, w: 840, h: 30 },
-  { x: 890, y: 460, w: 220, h: 80 },
-  { x: 1160, y: 420, w: 200, h: 120 },
-  { x: 1420, y: 510, w: 980, h: 30 },
-  { x: 1760, y: 445, w: 140, h: 22 },
-  { x: 1980, y: 390, w: 140, h: 22 },
-  { x: 2190, y: 335, w: 140, h: 22 },
-  { x: 2410, y: 510, w: 760, h: 30 },
+  { x: 0, y: 510, w: 900, h: 30 },
+  { x: 960, y: 470, w: 240, h: 70 },
+  { x: 1260, y: 420, w: 220, h: 120 },
+  { x: 1530, y: 510, w: 1100, h: 30 },
+  { x: 1830, y: 440, w: 150, h: 20 },
+  { x: 2070, y: 370, w: 150, h: 20 },
+  { x: 2290, y: 300, w: 150, h: 20 },
+  { x: 2540, y: 510, w: 1020, h: 30 },
 ];
 
 const blocks = [
-  { x: 520, y: 360, w: 40, h: 40, type: "question" },
-  { x: 560, y: 360, w: 40, h: 40, type: "brick" },
-  { x: 600, y: 360, w: 40, h: 40, type: "brick" },
-  { x: 1730, y: 300, w: 40, h: 40, type: "question" },
-  { x: 1770, y: 300, w: 40, h: 40, type: "brick" },
+  { x: 520, y: 360, w: 40, h: 40, type: "question", content: "coin", used: false, bounce: 0 },
+  { x: 560, y: 360, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
+  { x: 600, y: 360, w: 40, h: 40, type: "brick", used: false, bounce: 0 },
+  { x: 1780, y: 300, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
+  { x: 1820, y: 300, w: 40, h: 40, type: "question", content: "coin", used: false, bounce: 0 },
+  { x: 1860, y: 300, w: 40, h: 40, type: "brick", used: false, bounce: 0 },
+  { x: 2780, y: 380, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
 ];
 
-const coins = Array.from({ length: 30 }, (_, i) => ({
-  x: 170 + i * 95,
+const items = [];
+
+const coins = Array.from({ length: 34 }, (_, i) => ({
+  x: 170 + i * 98,
   y: i % 4 === 0 ? 320 : i % 2 ? 390 : 270,
   r: 11,
   taken: false,
 }));
 
 const enemies = [
-  { x: 700, y: 484, w: 34, h: 26, vx: -1.8, minX: 560, maxX: 820, dead: false },
-  { x: 1610, y: 484, w: 34, h: 26, vx: -2.2, minX: 1450, maxX: 2350, dead: false },
-  { x: 2580, y: 484, w: 34, h: 26, vx: -1.7, minX: 2450, maxX: 3020, dead: false },
+  { x: 700, y: 484, w: 34, h: 26, vx: -1.8, minX: 560, maxX: 860, dead: false },
+  { x: 1710, y: 484, w: 34, h: 26, vx: -2.2, minX: 1570, maxX: 2480, dead: false },
+  { x: 2880, y: 484, w: 34, h: 26, vx: -1.7, minX: 2650, maxX: 3430, dead: false },
 ];
 
-const goal = { x: 3090, y: 380, w: 16, h: 130 };
+const goal = { x: 3470, y: 380, w: 16, h: 130 };
 
 function renderHUD() {
   scoreEl.textContent = `Score: ${world.score}`;
   livesEl.textContent = `Lives: ${world.lives}`;
+  powerEl.textContent = `Power: ${player.superTimer > 0 ? "SUPER" : "NORMAL"}`;
 }
 
 function resetGame(full = false) {
@@ -80,7 +87,8 @@ function resetGame(full = false) {
   player.vx = 0;
   player.vy = 0;
   player.onGround = false;
-  player.invincibleTimer = 85;
+  player.invincibleTimer = 80;
+  if (full) player.superTimer = 0;
   world.cameraX = 0;
 
   if (full) {
@@ -90,6 +98,11 @@ function resetGame(full = false) {
     world.win = false;
     coins.forEach((c) => (c.taken = false));
     enemies.forEach((e) => (e.dead = false));
+    blocks.forEach((b) => {
+      b.used = false;
+      b.bounce = 0;
+    });
+    items.length = 0;
   }
 
   renderHUD();
@@ -100,6 +113,12 @@ function overlaps(a, b) {
 }
 
 function loseLife() {
+  if (player.superTimer > 0) {
+    player.superTimer = 0;
+    player.invincibleTimer = 110;
+    renderHUD();
+    return;
+  }
   world.lives -= 1;
   renderHUD();
   if (world.lives <= 0) {
@@ -107,6 +126,34 @@ function loseLife() {
     return;
   }
   resetGame(false);
+}
+
+function spawnItemFromBlock(block) {
+  items.push({
+    type: block.content,
+    x: block.x + 6,
+    y: block.y - 24,
+    w: 28,
+    h: 28,
+    vx: 1.4 * (player.facing || 1),
+    vy: -1.2,
+    emerging: 18,
+    onGround: false,
+    collected: false,
+  });
+}
+
+function hitBlockFromBelow(block) {
+  block.bounce = 8;
+  if (block.type === "question" && !block.used) {
+    block.used = true;
+    if (block.content === "coin") {
+      world.score += 150;
+      renderHUD();
+    } else {
+      spawnItemFromBlock(block);
+    }
+  }
 }
 
 function updatePlayer() {
@@ -120,7 +167,7 @@ function updatePlayer() {
   }
 
   player.vx *= player.onGround ? GROUND_FRICTION : AIR_FRICTION;
-  player.vx = Math.max(Math.min(player.vx, 8.5), -8.5);
+  player.vx = Math.max(Math.min(player.vx, 8.8), -8.8);
 
   player.vy += GRAVITY;
   player.vy = Math.min(player.vy, MAX_FALL);
@@ -144,11 +191,8 @@ function updatePlayer() {
       player.onGround = true;
     } else if (prevTop >= p.y + p.h - 1) {
       player.y = p.y + p.h;
-      if (p.type === "question") {
-        world.score += 50;
-        renderHUD();
-      }
-      player.vy = 0.4;
+      if (p.type) hitBlockFromBelow(p);
+      player.vy = 0.5;
     } else if (prevRight <= p.x + 1) {
       player.x = p.x - player.w;
       player.vx = 0;
@@ -159,12 +203,70 @@ function updatePlayer() {
   }
 
   if (player.y > world.height + 200) loseLife();
-
   if (player.invincibleTimer > 0) player.invincibleTimer--;
+  if (player.superTimer > 0 && --player.superTimer % 20 === 0) renderHUD();
 
   player.x = Math.max(0, Math.min(player.x, world.width - player.w));
   const cameraTarget = player.x - canvas.width * 0.38;
   world.cameraX = Math.max(0, Math.min(cameraTarget, world.width - canvas.width));
+}
+
+function resolveItemCollision(item, solid) {
+  if (!overlaps(item, solid)) return;
+
+  const prevBottom = item.y + item.h - item.vy;
+  const prevTop = item.y - item.vy;
+  const prevRight = item.x + item.w - item.vx;
+  const prevLeft = item.x - item.vx;
+
+  if (prevBottom <= solid.y + 1) {
+    item.y = solid.y - item.h;
+    item.vy = 0;
+    item.onGround = true;
+  } else if (prevTop >= solid.y + solid.h - 1) {
+    item.y = solid.y + solid.h;
+    item.vy = 0;
+  } else if (prevRight <= solid.x + 1) {
+    item.x = solid.x - item.w;
+    item.vx = -Math.abs(item.vx);
+  } else if (prevLeft >= solid.x + solid.w - 1) {
+    item.x = solid.x + solid.w;
+    item.vx = Math.abs(item.vx);
+  }
+}
+
+function updateItems() {
+  const solids = [...platforms, ...blocks];
+  for (const item of items) {
+    if (item.collected) continue;
+
+    if (item.emerging > 0) {
+      item.y -= 1.4;
+      item.emerging--;
+    } else {
+      item.vy += GRAVITY * 0.75;
+      item.vy = Math.min(item.vy, 8);
+      item.x += item.vx;
+      item.y += item.vy;
+      item.onGround = false;
+
+      for (const s of solids) resolveItemCollision(item, s);
+    }
+
+    if (overlaps(item, player)) {
+      item.collected = true;
+      world.score += 500;
+      player.superTimer = 900;
+      player.invincibleTimer = 70;
+      renderHUD();
+    }
+  }
+}
+
+function updateBlocks() {
+  for (const block of blocks) {
+    if (block.bounce > 0) block.bounce -= 1;
+  }
 }
 
 function updateCoins() {
@@ -193,6 +295,10 @@ function updateEnemies() {
       player.vy = -9.5;
       world.score += 250;
       renderHUD();
+    } else if (player.superTimer > 0) {
+      e.dead = true;
+      world.score += 150;
+      renderHUD();
     } else if (player.invincibleTimer <= 0) {
       loseLife();
       return;
@@ -219,22 +325,20 @@ function drawRoundRect(x, y, w, h, r, color) {
 function drawBackground() {
   const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
   skyGrad.addColorStop(0, "#7dc7ff");
-  skyGrad.addColorStop(0.62, "#9edbff");
-  skyGrad.addColorStop(1, "#b6f3ff");
+  skyGrad.addColorStop(0.62, "#a6e2ff");
+  skyGrad.addColorStop(1, "#d7f8ff");
   ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Far hills
-  for (let i = -1; i < 8; i++) {
+  for (let i = -1; i < 9; i++) {
     const x = i * 260 - (world.cameraX * 0.16) % 260;
-    drawRoundRect(x, 360, 220, 180, 90, "#7fd16d");
+    drawRoundRect(x, 360, 220, 180, 90, i % 2 ? "#7fd16d" : "#74ca61");
   }
 
-  // Clouds
   ctx.fillStyle = "rgba(255,255,255,0.9)";
-  for (let i = 0; i < 9; i++) {
-    const x = i * 220 - (world.cameraX * 0.28) % 220;
-    const y = 70 + (i % 3) * 42;
+  for (let i = 0; i < 10; i++) {
+    const x = i * 210 - (world.cameraX * 0.28) % 210;
+    const y = 66 + (i % 3) * 42;
     ctx.beginPath();
     ctx.arc(x + 20, y + 10, 24, 0, Math.PI * 2);
     ctx.arc(x + 48, y, 30, 0, Math.PI * 2);
@@ -265,17 +369,23 @@ function drawPlatformsAndBlocks() {
 
   for (const b of blocks) {
     const bx = Math.floor(b.x - world.cameraX);
-    if (b.type === "question") {
-      drawRoundRect(bx, b.y, b.w, b.h, 7, "#f2a72f");
+    const by = b.y - b.bounce * 0.8;
+
+    if (b.type === "question" && !b.used) {
+      drawRoundRect(bx, by, b.w, b.h, 7, "#f2a72f");
       ctx.fillStyle = "#f9de95";
       ctx.font = "bold 26px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("?", bx + b.w / 2, b.y + 29);
+      ctx.fillText("?", bx + b.w / 2, by + 29);
+    } else if (b.type === "question" && b.used) {
+      drawRoundRect(bx, by, b.w, b.h, 7, "#9d8d73");
+      ctx.fillStyle = "#c6baa7";
+      ctx.fillRect(bx + 8, by + 15, 24, 8);
     } else {
-      drawRoundRect(bx, b.y, b.w, b.h, 7, "#b86f3a");
+      drawRoundRect(bx, by, b.w, b.h, 7, "#b86f3a");
       ctx.strokeStyle = "#894921";
       ctx.lineWidth = 3;
-      ctx.strokeRect(bx + 4, b.y + 4, b.w - 8, b.h - 8);
+      ctx.strokeRect(bx + 4, by + 4, b.w - 8, b.h - 8);
     }
   }
 }
@@ -292,6 +402,27 @@ function drawCoins() {
     ctx.strokeStyle = "#b8860b";
     ctx.lineWidth = 3;
     ctx.stroke();
+  }
+}
+
+function drawItems() {
+  for (const item of items) {
+    if (item.collected) continue;
+    const x = item.x - world.cameraX;
+    const y = item.y;
+
+    if (item.type === "mushroom") {
+      drawRoundRect(x + 2, y + 12, 24, 14, 6, "#f7ebd5");
+      drawRoundRect(x, y, 28, 16, 8, "#e6362f");
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(x + 9, y + 8, 3.5, 0, Math.PI * 2);
+      ctx.arc(x + 19, y + 8, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#2b2b2b";
+      ctx.fillRect(x + 8, y + 18, 3, 3);
+      ctx.fillRect(x + 17, y + 18, 3, 3);
+    }
   }
 }
 
@@ -316,18 +447,22 @@ function drawMarioLikeCharacter() {
   const runCycle = Math.sin(world.frame * 0.32 + player.x * 0.06) * Math.min(Math.abs(player.vx), 1);
   const armSwing = runCycle * 5;
   const legSwing = runCycle * 7;
+  const scale = player.superTimer > 0 ? 1.18 : 1;
 
   ctx.save();
   ctx.translate(px + player.w / 2, py + player.h / 2);
-  ctx.scale(player.facing, 1);
+  ctx.scale(player.facing * scale, scale);
 
-  // legs/shoes
+  if (player.superTimer > 0) {
+    ctx.shadowColor = "rgba(255, 237, 84, 0.7)";
+    ctx.shadowBlur = 14;
+  }
+
   drawRoundRect(-12 - legSwing * 0.2, 16, 12, 16, 4, "#1c56d8");
   drawRoundRect(2 + legSwing * 0.2, 16, 12, 16, 4, "#1c56d8");
   drawRoundRect(-14 - legSwing * 0.2, 28, 14, 6, 3, "#6e3b1d");
   drawRoundRect(2 + legSwing * 0.2, 28, 14, 6, 3, "#6e3b1d");
 
-  // body + overalls
   drawRoundRect(-14, -6, 28, 26, 9, "#e5392f");
   drawRoundRect(-11, 2, 22, 20, 8, "#1f5fff");
   ctx.fillStyle = "#ffdc9f";
@@ -335,7 +470,6 @@ function drawMarioLikeCharacter() {
   ctx.arc(0, -10, 11, 0, Math.PI * 2);
   ctx.fill();
 
-  // cap
   drawRoundRect(-14, -22, 28, 12, 6, "#d62923");
   drawRoundRect(-11, -12, 22, 5, 2, "#b71f1a");
   ctx.fillStyle = "#fff";
@@ -347,7 +481,6 @@ function drawMarioLikeCharacter() {
   ctx.textAlign = "center";
   ctx.fillText("M", 0, -13.7);
 
-  // eyes + nose + moustache
   ctx.fillStyle = "#fff";
   ctx.fillRect(-7, -13, 4, 5);
   ctx.fillRect(2, -13, 4, 5);
@@ -357,13 +490,11 @@ function drawMarioLikeCharacter() {
   drawRoundRect(-3, -8, 6, 5, 2.5, "#f0ba84");
   drawRoundRect(-8, -3, 16, 4, 2, "#1d1d1d");
 
-  // gloves/arms
   drawRoundRect(-20, -2 + armSwing * 0.25, 8, 16, 4, "#e5392f");
   drawRoundRect(12, -2 - armSwing * 0.25, 8, 16, 4, "#e5392f");
   drawRoundRect(-22, 8 + armSwing * 0.25, 10, 8, 4, "#ffffff");
   drawRoundRect(12, 8 - armSwing * 0.25, 10, 8, 4, "#ffffff");
 
-  // buttons
   ctx.fillStyle = "#ffe37a";
   ctx.beginPath();
   ctx.arc(-5, 8, 2.2, 0, Math.PI * 2);
@@ -403,6 +534,7 @@ function drawScene() {
   drawGroundDecor();
   drawPlatformsAndBlocks();
   drawCoins();
+  drawItems();
   drawEnemies();
   drawGoal();
   drawMarioLikeCharacter();
@@ -413,6 +545,8 @@ function gameLoop() {
   world.frame += 1;
   if (!world.gameOver && !world.win) {
     updatePlayer();
+    updateBlocks();
+    updateItems();
     updateCoins();
     updateEnemies();
     checkGoal();

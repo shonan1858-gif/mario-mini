@@ -39,6 +39,7 @@ canvas {
   margin-top: 0.75rem;
   display: flex;
   justify-content: center;
-  gap: 2rem;
+  gap: 1.25rem;
   font-weight: bold;
+  flex-wrap: wrap;
 }
