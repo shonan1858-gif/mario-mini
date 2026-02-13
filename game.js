@@ -61,6 +61,7 @@ const blocks = [
 const items = [];
 const popupCoins = [];
 const floatingTexts = [];
+const fallingClouds = [];
 
 const coins = Array.from({ length: 34 }, (_, i) => ({
   x: 170 + i * 98,
@@ -113,6 +114,7 @@ function resetGame(full = false) {
     items.length = 0;
     popupCoins.length = 0;
     floatingTexts.length = 0;
+    fallingClouds.length = 0;
   }
 
   renderHUD();
@@ -304,11 +306,49 @@ function updateEnemies() {
       addScore(250, e.x, e.y);
     } else if (player.superTimer > 0) {
       e.dead = true;
-      addScore(150, block.x, block.y - 20);
-      popupCoins.push({ x: block.x + block.w / 2, y: block.y - 6, vy: -3.4, life: 30 });
+      addScore(150, e.x, e.y);
     } else if (player.invincibleTimer <= 0) {
       loseLife();
       return;
+    }
+  }
+}
+
+function spawnFallingCloud() {
+  const spawnX = Math.max(40, Math.min(world.width - 120, world.cameraX + Math.random() * (canvas.width + 160) - 80));
+  fallingClouds.push({
+    x: spawnX,
+    y: -90,
+    w: 78,
+    h: 44,
+    vx: (Math.random() * 1.2 - 0.6),
+    vy: 2.5 + Math.random() * 1.5,
+    life: 600,
+    hit: false,
+  });
+}
+
+function updateFallingClouds() {
+  if (world.frame % 110 === 0) spawnFallingCloud();
+
+  for (const cloud of fallingClouds) {
+    cloud.x += cloud.vx;
+    cloud.y += cloud.vy;
+    cloud.life -= 1;
+
+    if (!cloud.hit && overlaps(player, cloud)) {
+      cloud.hit = true;
+      cloud.life = 0;
+      if (player.invincibleTimer <= 0) {
+        loseLife();
+      }
+    }
+  }
+
+  for (let i = fallingClouds.length - 1; i >= 0; i--) {
+    const c = fallingClouds[i];
+    if (c.life <= 0 || c.y > world.height + 100) {
+      fallingClouds.splice(i, 1);
     }
   }
 }
@@ -451,6 +491,23 @@ function drawItems() {
   }
 }
 
+function drawFallingClouds() {
+  for (const cloud of fallingClouds) {
+    const x = cloud.x - world.cameraX;
+    const y = cloud.y;
+
+    ctx.fillStyle = "rgba(236, 246, 255, 0.95)";
+    ctx.beginPath();
+    ctx.arc(x + 20, y + 20, 15, 0, Math.PI * 2);
+    ctx.arc(x + 38, y + 16, 18, 0, Math.PI * 2);
+    ctx.arc(x + 58, y + 20, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(135, 188, 241, 0.65)";
+    ctx.fillRect(x + 15, y + 30, 46, 6);
+  }
+}
+
 function drawEffects() {
   for (const c of popupCoins) {
     const x = c.x - world.cameraX;
@@ -577,6 +634,7 @@ function drawOverlay() {
 
 function drawScene() {
   drawBackground();
+  drawFallingClouds();
   drawGroundDecor();
   drawPlatformsAndBlocks();
   drawCoins();
@@ -596,6 +654,7 @@ function gameLoop() {
     updateItems();
     updateCoins();
     updateEnemies();
+    updateFallingClouds();
     updateEffects();
     checkGoal();
   }
