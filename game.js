@@ -59,6 +59,8 @@ const blocks = [
 ];
 
 const items = [];
+const popupCoins = [];
+const floatingTexts = [];
 
 const coins = Array.from({ length: 34 }, (_, i) => ({
   x: 170 + i * 98,
@@ -79,6 +81,12 @@ function renderHUD() {
   scoreEl.textContent = `Score: ${world.score}`;
   livesEl.textContent = `Lives: ${world.lives}`;
   powerEl.textContent = `Power: ${player.superTimer > 0 ? "SUPER" : "NORMAL"}`;
+}
+
+function addScore(points, x = player.x, y = player.y) {
+  world.score += points;
+  floatingTexts.push({ x, y, text: `+${points}`, life: 45 });
+  renderHUD();
 }
 
 function resetGame(full = false) {
@@ -103,6 +111,8 @@ function resetGame(full = false) {
       b.bounce = 0;
     });
     items.length = 0;
+    popupCoins.length = 0;
+    floatingTexts.length = 0;
   }
 
   renderHUD();
@@ -148,8 +158,8 @@ function hitBlockFromBelow(block) {
   if (block.type === "question" && !block.used) {
     block.used = true;
     if (block.content === "coin") {
-      world.score += 150;
-      renderHUD();
+      addScore(150, block.x, block.y - 20);
+      popupCoins.push({ x: block.x + block.w / 2, y: block.y - 6, vy: -3.4, life: 30 });
     } else {
       spawnItemFromBlock(block);
     }
@@ -255,10 +265,9 @@ function updateItems() {
 
     if (overlaps(item, player)) {
       item.collected = true;
-      world.score += 500;
+      addScore(500, item.x, item.y);
       player.superTimer = 900;
       player.invincibleTimer = 70;
-      renderHUD();
     }
   }
 }
@@ -276,8 +285,7 @@ function updateCoins() {
     const dy = player.y + player.h / 2 - coin.y;
     if (Math.hypot(dx, dy) < coin.r + player.w * 0.34) {
       coin.taken = true;
-      world.score += 100;
-      renderHUD();
+      addScore(100, coin.x, coin.y);
     }
   }
 }
@@ -293,16 +301,33 @@ function updateEnemies() {
     if (playerBottomPrev <= e.y + 8 && player.vy > 0) {
       e.dead = true;
       player.vy = -9.5;
-      world.score += 250;
-      renderHUD();
+      addScore(250, e.x, e.y);
     } else if (player.superTimer > 0) {
       e.dead = true;
-      world.score += 150;
-      renderHUD();
+      addScore(150, block.x, block.y - 20);
+      popupCoins.push({ x: block.x + block.w / 2, y: block.y - 6, vy: -3.4, life: 30 });
     } else if (player.invincibleTimer <= 0) {
       loseLife();
       return;
     }
+  }
+}
+
+function updateEffects() {
+  for (const c of popupCoins) {
+    c.y += c.vy;
+    c.vy += 0.22;
+    c.life -= 1;
+  }
+  for (const t of floatingTexts) {
+    t.y -= 0.8;
+    t.life -= 1;
+  }
+  for (let i = popupCoins.length - 1; i >= 0; i--) {
+    if (popupCoins[i].life <= 0) popupCoins.splice(i, 1);
+  }
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    if (floatingTexts[i].life <= 0) floatingTexts.splice(i, 1);
   }
 }
 
@@ -426,6 +451,27 @@ function drawItems() {
   }
 }
 
+function drawEffects() {
+  for (const c of popupCoins) {
+    const x = c.x - world.cameraX;
+    ctx.fillStyle = "#ffd43b";
+    ctx.beginPath();
+    ctx.ellipse(x, c.y, 9, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#b8860b";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  for (const t of floatingTexts) {
+    const alpha = Math.max(0, t.life / 45);
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(t.text, t.x - world.cameraX, t.y);
+  }
+}
+
 function drawEnemies() {
   for (const e of enemies) {
     if (e.dead) continue;
@@ -535,6 +581,7 @@ function drawScene() {
   drawPlatformsAndBlocks();
   drawCoins();
   drawItems();
+  drawEffects();
   drawEnemies();
   drawGoal();
   drawMarioLikeCharacter();
@@ -549,6 +596,7 @@ function gameLoop() {
     updateItems();
     updateCoins();
     updateEnemies();
+    updateEffects();
     checkGoal();
   }
   drawScene();
