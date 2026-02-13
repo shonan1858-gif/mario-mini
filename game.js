@@ -10,7 +10,7 @@ const AIR_FRICTION = 0.94;
 const MAX_FALL = 14;
 
 const world = {
-  width: 3600,
+  width: 3800,
   height: canvas.height,
   cameraX: 0,
   score: 0,
@@ -20,7 +20,7 @@ const world = {
   frame: 0,
 };
 
-const keys = { left: false, right: false, jump: false };
+const keys = { left: false, right: false, jump: false, grab: false };
 
 const player = {
   x: 100,
@@ -38,32 +38,49 @@ const player = {
 };
 
 const platforms = [
-  { x: 0, y: 510, w: 900, h: 30 },
-  { x: 960, y: 470, w: 240, h: 70 },
-  { x: 1260, y: 420, w: 220, h: 120 },
-  { x: 1530, y: 510, w: 1100, h: 30 },
-  { x: 1830, y: 440, w: 150, h: 20 },
-  { x: 2070, y: 370, w: 150, h: 20 },
-  { x: 2290, y: 300, w: 150, h: 20 },
-  { x: 2540, y: 510, w: 1020, h: 30 },
+  { x: 0, y: 510, w: 980, h: 30 },
+  { x: 1060, y: 470, w: 240, h: 70 },
+  { x: 1360, y: 420, w: 220, h: 120 },
+  { x: 1630, y: 510, w: 1220, h: 30 },
+  { x: 1930, y: 440, w: 150, h: 20 },
+  { x: 2170, y: 370, w: 150, h: 20 },
+  { x: 2390, y: 300, w: 150, h: 20 },
+  { x: 2640, y: 510, w: 1140, h: 30 },
 ];
 
 const blocks = [
   { x: 520, y: 360, w: 40, h: 40, type: "question", content: "coin", used: false, bounce: 0 },
   { x: 560, y: 360, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
   { x: 600, y: 360, w: 40, h: 40, type: "brick", used: false, bounce: 0 },
-  { x: 1780, y: 300, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
-  { x: 1820, y: 300, w: 40, h: 40, type: "question", content: "coin", used: false, bounce: 0 },
-  { x: 1860, y: 300, w: 40, h: 40, type: "brick", used: false, bounce: 0 },
-  { x: 2780, y: 380, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
+  { x: 1980, y: 300, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
+  { x: 2020, y: 300, w: 40, h: 40, type: "question", content: "coin", used: false, bounce: 0 },
+  { x: 2060, y: 300, w: 40, h: 40, type: "brick", used: false, bounce: 0 },
+  { x: 2940, y: 380, w: 40, h: 40, type: "question", content: "mushroom", used: false, bounce: 0 },
 ];
+
+const boss = {
+  x: 3540,
+  y: 445,
+  w: 86,
+  h: 64,
+  vx: -1.6,
+  minX: 3330,
+  maxX: 3730,
+  alive: true,
+  grabbed: false,
+  thrown: false,
+  throwVx: 0,
+  throwVy: 0,
+  spin: 0,
+  tailLength: 44,
+};
 
 const items = [];
 const popupCoins = [];
 const floatingTexts = [];
 const fallingClouds = [];
 
-const coins = Array.from({ length: 34 }, (_, i) => ({
+const coins = Array.from({ length: 36 }, (_, i) => ({
   x: 170 + i * 98,
   y: i % 4 === 0 ? 320 : i % 2 ? 390 : 270,
   r: 11,
@@ -72,16 +89,18 @@ const coins = Array.from({ length: 34 }, (_, i) => ({
 
 const enemies = [
   { x: 700, y: 484, w: 34, h: 26, vx: -1.8, minX: 560, maxX: 860, dead: false },
-  { x: 1710, y: 484, w: 34, h: 26, vx: -2.2, minX: 1570, maxX: 2480, dead: false },
-  { x: 2880, y: 484, w: 34, h: 26, vx: -1.7, minX: 2650, maxX: 3430, dead: false },
+  { x: 1710, y: 484, w: 34, h: 26, vx: -2.2, minX: 1570, maxX: 2680, dead: false },
+  { x: 2980, y: 484, w: 34, h: 26, vx: -1.7, minX: 2750, maxX: 3430, dead: false },
 ];
-
-const goal = { x: 3470, y: 380, w: 16, h: 130 };
 
 function renderHUD() {
   scoreEl.textContent = `Score: ${world.score}`;
   livesEl.textContent = `Lives: ${world.lives}`;
-  powerEl.textContent = `Power: ${player.superTimer > 0 ? "SUPER" : "NORMAL"}`;
+  if (!boss.alive) {
+    powerEl.textContent = "Power: BOSS DOWN";
+  } else {
+    powerEl.textContent = `Power: ${player.superTimer > 0 ? "SUPER" : "NORMAL"}`;
+  }
 }
 
 function addScore(points, x = player.x, y = player.y) {
@@ -99,6 +118,16 @@ function resetGame(full = false) {
   player.invincibleTimer = 80;
   if (full) player.superTimer = 0;
   world.cameraX = 0;
+
+  boss.x = 3540;
+  boss.y = 445;
+  boss.vx = -1.6;
+  boss.alive = true;
+  boss.grabbed = false;
+  boss.thrown = false;
+  boss.throwVx = 0;
+  boss.throwVy = 0;
+  boss.spin = 0;
 
   if (full) {
     world.score = 0;
@@ -314,22 +343,73 @@ function updateEnemies() {
   }
 }
 
+function bossTailHitbox() {
+  const tailW = 26;
+  const tailH = 18;
+  const tailX = boss.x + (boss.vx >= 0 ? -tailW + 6 : boss.w - 6);
+  const tailY = boss.y + 34;
+  return { x: tailX, y: tailY, w: tailW, h: tailH };
+}
+
+function updateBoss() {
+  if (!boss.alive) return;
+
+  if (boss.thrown) {
+    boss.x += boss.throwVx;
+    boss.y += boss.throwVy;
+    boss.throwVy += 0.28;
+
+    if (boss.y > world.height + 140 || boss.x < -180 || boss.x > world.width + 180) {
+      boss.alive = false;
+      world.win = true;
+      addScore(3000, player.x, player.y - 40);
+      return;
+    }
+  } else if (boss.grabbed) {
+    boss.spin += 0.18 + Math.min(Math.abs(player.vx), 7) * 0.03;
+    const radius = 74;
+    boss.x = player.x + player.w / 2 + Math.cos(boss.spin) * radius - boss.w / 2;
+    boss.y = player.y + player.h / 2 + Math.sin(boss.spin) * (radius * 0.65) - boss.h / 2;
+
+    if (!keys.grab) {
+      boss.grabbed = false;
+      boss.thrown = true;
+      const throwPower = 9 + Math.min(Math.abs(player.vx), 4);
+      boss.throwVx = Math.cos(boss.spin) * throwPower;
+      boss.throwVy = Math.sin(boss.spin) * throwPower - 5.5;
+    }
+  } else {
+    boss.x += boss.vx;
+    if (boss.x < boss.minX || boss.x + boss.w > boss.maxX) boss.vx *= -1;
+
+    const tail = bossTailHitbox();
+    if (keys.grab && overlaps(player, tail)) {
+      boss.grabbed = true;
+      boss.spin = 0;
+    }
+
+    if (overlaps(player, boss) && player.invincibleTimer <= 0 && player.superTimer <= 0) {
+      loseLife();
+    }
+  }
+}
+
 function spawnFallingCloud() {
-  const spawnX = Math.max(40, Math.min(world.width - 120, world.cameraX + Math.random() * (canvas.width + 160) - 80));
+  const spawnX = world.cameraX + Math.random() * canvas.width;
   fallingClouds.push({
-    x: spawnX,
-    y: -90,
+    x: Math.max(30, Math.min(world.width - 90, spawnX)),
+    y: -40 - Math.random() * 180,
     w: 78,
     h: 44,
-    vx: (Math.random() * 1.2 - 0.6),
-    vy: 2.5 + Math.random() * 1.5,
-    life: 600,
+    vx: Math.random() * 1.6 - 0.8,
+    vy: 3.2 + Math.random() * 2.2,
+    life: 500,
     hit: false,
   });
 }
 
 function updateFallingClouds() {
-  if (world.frame % 110 === 0) spawnFallingCloud();
+  if (world.frame % 40 === 0) spawnFallingCloud();
 
   for (const cloud of fallingClouds) {
     cloud.x += cloud.vx;
@@ -339,15 +419,13 @@ function updateFallingClouds() {
     if (!cloud.hit && overlaps(player, cloud)) {
       cloud.hit = true;
       cloud.life = 0;
-      if (player.invincibleTimer <= 0) {
-        loseLife();
-      }
+      if (player.invincibleTimer <= 0) loseLife();
     }
   }
 
   for (let i = fallingClouds.length - 1; i >= 0; i--) {
     const c = fallingClouds[i];
-    if (c.life <= 0 || c.y > world.height + 100) {
+    if (c.life <= 0 || c.y > world.height + 90) {
       fallingClouds.splice(i, 1);
     }
   }
@@ -371,10 +449,6 @@ function updateEffects() {
   }
 }
 
-function checkGoal() {
-  if (overlaps(player, goal)) world.win = true;
-}
-
 function drawRoundRect(x, y, w, h, r, color) {
   ctx.fillStyle = color;
   ctx.beginPath();
@@ -395,13 +469,13 @@ function drawBackground() {
   ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  for (let i = -1; i < 9; i++) {
+  for (let i = -1; i < 10; i++) {
     const x = i * 260 - (world.cameraX * 0.16) % 260;
     drawRoundRect(x, 360, 220, 180, 90, i % 2 ? "#7fd16d" : "#74ca61");
   }
 
   ctx.fillStyle = "rgba(255,255,255,0.9)";
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 11; i++) {
     const x = i * 210 - (world.cameraX * 0.28) % 210;
     const y = 66 + (i % 3) * 42;
     ctx.beginPath();
@@ -496,14 +570,14 @@ function drawFallingClouds() {
     const x = cloud.x - world.cameraX;
     const y = cloud.y;
 
-    ctx.fillStyle = "rgba(236, 246, 255, 0.95)";
+    ctx.fillStyle = "rgba(236, 246, 255, 0.96)";
     ctx.beginPath();
     ctx.arc(x + 20, y + 20, 15, 0, Math.PI * 2);
     ctx.arc(x + 38, y + 16, 18, 0, Math.PI * 2);
     ctx.arc(x + 58, y + 20, 14, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = "rgba(135, 188, 241, 0.65)";
+    ctx.fillStyle = "rgba(135, 188, 241, 0.68)";
     ctx.fillRect(x + 15, y + 30, 46, 6);
   }
 }
@@ -540,6 +614,22 @@ function drawEnemies() {
     ctx.fillStyle = "#5c2d17";
     ctx.fillRect(x + 2, e.y + e.h - 6, e.w - 4, 6);
   }
+}
+
+function drawBoss() {
+  if (!boss.alive) return;
+  const x = boss.x - world.cameraX;
+  const y = boss.y;
+
+  drawRoundRect(x, y + 18, boss.w, boss.h - 18, 14, "#2e7d32");
+  drawRoundRect(x + 8, y, boss.w - 16, 28, 12, "#3fa447");
+  ctx.fillStyle = "#f7e6c8";
+  ctx.fillRect(x + 24, y + 16, 14, 10);
+  ctx.fillRect(x + 48, y + 16, 14, 10);
+
+  const tail = bossTailHitbox();
+  const tx = tail.x - world.cameraX;
+  drawRoundRect(tx, tail.y, tail.w, tail.h, 8, boss.grabbed ? "#ffd54f" : "#66bb6a");
 }
 
 function drawMarioLikeCharacter() {
@@ -607,27 +697,24 @@ function drawMarioLikeCharacter() {
   ctx.restore();
 }
 
-function drawGoal() {
-  drawWorldRect(goal.x, goal.y, goal.w, goal.h, "#ffffff");
-  const fx = goal.x + 16 - world.cameraX;
-  drawWorldRect(goal.x + 16, goal.y, 5, 20, "#35c96a");
-  ctx.fillStyle = "#35c96a";
-  ctx.beginPath();
-  ctx.moveTo(fx + 5, goal.y + 2);
-  ctx.lineTo(fx + 45, goal.y + 10);
-  ctx.lineTo(fx + 5, goal.y + 18);
-  ctx.closePath();
-  ctx.fill();
-}
-
 function drawOverlay() {
-  if (!world.gameOver && !world.win) return;
+  if (!world.gameOver && !world.win) {
+    if (boss.alive) {
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.font = "bold 18px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("X 長押しでボスのしっぽをつかむ → 離して投げる", 16, 28);
+    }
+    return;
+  }
+
   ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   ctx.font = "bold 56px sans-serif";
-  ctx.fillText(world.win ? "COURSE CLEAR!" : "GAME OVER", canvas.width / 2, 230);
+  ctx.fillText(world.win ? "BOSS CLEAR!" : "GAME OVER", canvas.width / 2, 230);
   ctx.font = "28px sans-serif";
   ctx.fillText("R キーでリスタート", canvas.width / 2, 295);
 }
@@ -641,7 +728,7 @@ function drawScene() {
   drawItems();
   drawEffects();
   drawEnemies();
-  drawGoal();
+  drawBoss();
   drawMarioLikeCharacter();
   drawOverlay();
 }
@@ -654,9 +741,9 @@ function gameLoop() {
     updateItems();
     updateCoins();
     updateEnemies();
+    updateBoss();
     updateFallingClouds();
     updateEffects();
-    checkGoal();
   }
   drawScene();
   requestAnimationFrame(gameLoop);
@@ -665,6 +752,7 @@ function gameLoop() {
 window.addEventListener("keydown", (e) => {
   if (e.code === "ArrowLeft") keys.left = true;
   if (e.code === "ArrowRight") keys.right = true;
+  if (e.code === "KeyX") keys.grab = true;
   if (e.code === "Space") {
     if (!keys.jump && player.onGround && !world.gameOver && !world.win) {
       player.vy = player.jumpPower;
@@ -678,6 +766,7 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("keyup", (e) => {
   if (e.code === "ArrowLeft") keys.left = false;
   if (e.code === "ArrowRight") keys.right = false;
+  if (e.code === "KeyX") keys.grab = false;
   if (e.code === "Space") keys.jump = false;
 });
 
